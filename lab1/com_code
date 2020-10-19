@@ -1,0 +1,16 @@
+name "lab1"
+
+.model  tiny                                ; memory nodel for COM
+.code                                       ; start of code segment
+org 100h                                    ; reserved memory +256Byte propusk pervih 256
+                                           
+start:                                     
+                                           
+mov ah,9                                    ; accumulator register. number of DOS in AH
+mov dx,offset message                       ; set in data message
+int 21h                                     ; system function 21h
+ret                                         ; end of COM programm
+                                           
+message db "String of symbols",0Dh,0Ah,'$'  ; string for output
+       
+end start                                   ; end of programm
