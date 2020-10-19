@@ -1,0 +1,19 @@
+name "lab1"
+
+.model small                                ; memory model for EXE
+.stack 100h                                 ; stack segment in 265Byte       reserved memory
+.code                                       ; segment of code
+start:
+                                            
+mov ax,@data                                ; adress of data segment in accumulator
+mov ds,ax                                   ; set in data register
+mov dx,offset message                       ; set in data message
+mov ah,9                                    ; print function
+int 21h                                     ; system function 21h           
+mov ax,4C00h                                ; (DOS end of programm)
+int 21h                                     ; system function 21h (DOS end of programm)
+.data                                       ; data segment
+
+message db "String of symbols",0Dh,0Ah,'$'
+       
+end start       
