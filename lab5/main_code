@@ -1,0 +1,256 @@
+org  100h
+jmp  start
+
+fName1 db 126 dup(0)
+fName2 db 126 dup(0) 
+firstFile dw 0
+secondFile dw 0 
+
+closeFile MACRO file  
+    mov bx, file 
+    mov ah, 3Eh
+    int 21h      
+ENDM
+
+copyName MACRO string       ; макрос копирования имени файла из коммандной строки
+    LOCAL copy
+    mov di, offset string
+    
+    copy:
+    movsb
+    
+    cmp [si], 0Dh           ;признак конца командной строки
+    je cmdEnd
+    
+    cmp [si], ' '
+    jne copy
+       
+ENDM     
+
+skipSpaces MACRO str        ; макрос пропуска пробелов
+    LOCAL skip
+    sub str, 1
+    skip:
+    inc str
+    cmp [str], ' ' 
+    je skip
+ENDM
+
+getFilesNames proc          ; получение имени
+    pusha
+		
+	mov si, 82h             ; начало командной строки
+	
+    skipSpaces si           ; пропуск пробелов
+	
+	copyName fName1         ; считывание первого слова
+	
+	skipSpaces si           ; пропуск пробелов
+	
+	copyName fName2         ; считывание второго слова
+	
+	cmdEnd:	    
+    popa
+    ret
+endp
+
+namesNotFound proc 
+    outputString cmdError
+    jmp exit 
+ENDM   
+
+checkNotFound proc          ; проверка введённости имён
+    
+    cmp [fName1], 0
+    je namesNotFound
+    
+    cmp [fName2], 0
+    je namesNotFound
+    
+    ret
+endp
+
+
+outputString MACRO string   ; вывод сообщений
+    push ax
+    mov dx, offset string
+    mov ah, 09h
+    int 21h      
+    pop ax
+ENDM 
+
+size1 dw '$'                                                   ; переменная для размера первого файла
+cmdError db 09h,"Can`t get file names from cmd arguments",'$'  ; сообщение ошибки
+nameOfFile1      db       30 dup('$')                          ; имя файла
+nameOfFile2      db       30 dup('$')                          ; имя файла  
+message1 db "Files are EQUAL",0Dh,0Ah,'$'                      ; сообщение результата  
+message2 db "First file is greater",0Dh,0Ah,'$'                ; сообщение результата     
+message3 db "Second file is greater",0Dh,0Ah,'$'               ; сообщение результата    
+openingError db 09h,"Problem with file opening: ",'$'          ; сообщение ошибки открытия
+fileNotFound db "file not found.",'$'                          ; пояснение ошибки
+pathNotFound db "path not found.",'$'                          ; пояснение ошибки
+
+
+EQUAL proc       
+    outputString message1
+    jmp exit  
+endp
+
+GREATER proc       
+    outputString message2
+    jmp exit 
+endp 
+
+LOWER proc       
+ 
+    outputString message3 
+    jmp exit
+endp 
+ 
+failedOpen proc                 ; проверка ошибок
+    
+    outputString openingError   ; файл не найден   
+    cmp ax, 02h   
+    jne test2
+    outputString fileNotFound
+   jmp exit
+test2:                          ; путь не найден     
+    cmp ax, 03h 
+    outputString pathNotFound
+    jmp exit      
+    
+endp  
+
+getSize MACRO file  
+    xor cx, cx
+    xor dx, dx 
+    mov bx, file
+    mov al, 02h
+    mov ah, 42h
+    int 21h      
+ENDM  
+
+openFileR proc 
+    xor cx, cx 
+    xor al, al
+    mov ah, 3dh
+    mov al, 00h 
+    int 21h 
+    jc failedOpen   
+    ret    
+endp 
+
+cmpSize proc 
+    pusha
+    
+    getSize firstFile       ;???????? ?????? ??????? ?????
+    
+    ;????????? ???????? ? ????
+    push ax
+    push dx 
+    
+    getSize secondFile      ;???????? ?????? ??????? ?????
+    
+    ;??????????? ???????? ? ?????? ???? ?????????
+    mov cx, ax
+    mov bx, dx 
+    
+    ;??????? ?????? ??????? ?????
+    pop dx
+    pop ax
+    
+    ;???????? ?????? 1 ? 2 ?????
+    cmp ax, cx
+              ; равны
+      jl GREATER         ; первое больше
+      jg LOWER 
+    
+    cmp bx, dx
+            
+      jl GREATER         ; первое больше
+      jg LOWER   
+      
+      jmp EQUAL    
+    popa
+    ret             
+    
+   
+endp 
+
+start:  
+
+      call getFilesNames   ; получение инем файлов из коммандной строки
+
+    
+      call checkNotFound   ; проверка получения имени файла 
+;;-------------------------- Открытие 1го файла
+;      mov ax,3D02h        
+;      mov al, 00h
+;      lea dx, fName1
+;      int   21h            
+;      
+;      jc failedOpen
+;      mov   bx,ax         ; BX = дескриптор файла для Lseek
+;
+;;-------------------------- Lseek 
+;       mov   ax,4202h     ; AL = 2 - переместить указатель в конец (плюс CX:DX)
+;                          ; установка указателя в конец файла
+;       xor   dx,dx        ; CX:DX = 0
+;       xor   cx,cx        ;
+;       int 21h
+;       mov firstFile, ax
+;       mov   size1, ax  
+;           
+;           
+;;-------------------------- Открытие 2го файла 
+;       xor ax,ax
+;     
+;       mov ax,3D02h     
+;       mov al, 00h
+;       lea dx, fName2 
+;       int   21h          
+;       
+;       jc failedOpen
+;       mov   bx,ax        ; BX = дескриптор файла для Lseek
+;
+;;-------------------------- Lseek 
+;       mov   ax,4202h     ; AL = 2 - переместить указатель в конец (плюс CX:DX)
+;       
+;       xor   dx,dx        ; CX:DX = 0
+;       xor   cx,cx 
+;       int 21h
+;       mov secondFile, ax 
+             ;??????? ?????? ????
+    lea dx, fName1
+    call openFileR
+    mov firstFile, ax 
+                  
+    ;??????? ?????? ????                 
+    lea dx, fName2
+    call openFileR
+    mov secondFile, ax
+     
+           call cmpSize
+       
+       
+       
+   ;   cmp size1, ax      ; сравнить значение1 и значение2
+   ;   je EQUAL           ; равны
+   ;   jl GREATER         ; первое больше
+   ;   jg LOWER           ; второе больше
+
+         
+       int   21h          
+                          
+       xor   dx,dx        
+       xor   cx,cx  
+
+       
+       EXIT:
+       closeFile firstFile                
+       closeFile secondFile 
+       mov ah, 4Ch    
+       int 21h                 
+       ret                           
+end start  
+     
