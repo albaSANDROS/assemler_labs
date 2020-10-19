@@ -1,0 +1,219 @@
+.model small  
+.stack 100h
+.data
+red equ 4        
+white equ 7 
+isEmpty dw 0
+data_size dw $-data              ; узнаём размер данных
+.code
+old_int dd 0                     ; Адрес старого обработчика 
+    endl db 0Dh, 0Ah, '$'       
+    
+addToStack macro symbol
+    push si                      ; запомнили координату
+    mov al, symbol
+    push ax                      ; запомнили символ
+        
+    inc isEmpty                  ; увеличили счётчик скобок на 1
+    jmp afterAddToStackAndOrCloseBracket  
+endm   
+ 
+new_handler proc far
+    cli                           ; Запрещаем прерывания
+    pushf                          
+    push ax        
+                   
+    in al, 21h                    ; Читаем маску мастера 
+    and al, 10111111b             ; Разрешаем прерывания клавиатуры
+    out 21h, al                   ; Записываем маску мастера    
+    
+    pop ax
+    call dword ptr cs:[old_int]   ; Вызываем старый обработчик
+    pusha                         ; Помещает в стек регистры общего назначения
+
+    push ds 
+    push es
+    
+    mov ax, @data
+    mov es, ax
+    mov ax, 0B800h                ;сегмент дисплея в текстовом режиме
+    mov ds, ax
+        
+    xor si, si
+                          
+mainLoop1:
+    cmp si, 4000                 ; сравниваем индекс с пороговым значением
+    je continue                  ; если они совпали, то идём красить скобки без пары
+    
+    inc si                       ; +1 чтобы пропустить ASCII-код и перейти на атрибут символа
+    
+    mov al, ds:[si]              ; поместили в al символ с позиции экрана ds:[si]
+    cmp al, red                  ; если прежний символ был окрашен в красный, то красим в белый
+    je colorPrev
+    
+afterColorPrev:        
+    inc si                       ; В общем увеличивает SI на 2, т.к. пропускаем атрибуты и переходим на след символ      
+    jmp mainLoop1
+    
+colorPrev:  
+    mov ds:[si], white
+    jmp afterColorPrev   
+                         
+continue:                
+    xor si, si                   ; DS:SI будет указывать на экран
+    
+mainLoop:
+    cmp si, 4000                 ; сравниваем индекс с пороговым значением
+    je letsColorIt               ; если они совпали, то идём красить скобки без пары
+
+    mov al, ds:[si]              ; поместили в al символ с позиции экрана ds:[si]
+
+    cmp al, '('
+    je addToStack1
+
+    cmp al, '{'
+    je addToStack2
+
+    cmp al, '['
+    je addToStack3
+
+    cmp al, ')'
+    je closeBracket
+
+    cmp al, '}'
+    je closeBracket
+
+    cmp al, ']'
+    je closeBracket
+
+afterAddToStackAndOrCloseBracket:   
+    inc si                       ;  Увеличивает SI на 2, т.к. пропускаем атрибуты      
+    inc si
+    jmp mainLoop
+
+addToStack1:   
+    addToStack ')'
+
+addToStack2:        
+    addToStack '}'
+
+addToStack3:     
+    addToStack ']'
+
+closeBracket:            
+    cmp isEmpty, 0               ; если открывающей скобки нет
+    je colorCloseBracket         ; значит закрывающая скобка без пары => подсвечиваем её красным цветом
+
+    pop bx                       ; извлекаем символ последней скобки
+    cmp bl, al                   ; сравниваем символ последней закрывающей скобки
+    jne resetStack               ; если символы скобок не совпали, то возвращаем символ, извлечённый из стека, обратно в стек и красим текущую скобку в красный цвет
+    
+    dec isEmpty                  ; в противном случае уменьшаем количество скобочек на 1
+
+    pop bx                       ; удаляем из стека координату открывающей скобки
+
+    jmp afterAddToStackAndOrCloseBracket
+
+resetStack:
+    push bx                      ; возвращаем обратно символ открывающей скобки
+                
+    mov ds:[si+1], red           ; изменили цвет скобки на красный
+
+    push si 					 ; запомнили координату текущей скобки
+
+    cmp al, ')'					 ; если это не закрывающая круглая скобка
+	jne otherBrackets			 ; то прыгаем на метку, на которой мы сделаем эту квадратную или фигурную скобку открывающей (')' - 1 = '(')
+
+	sub al, 1					 ; в противном случае делаем её открывающей круглой скобкой
+	jmp pushMe					 ; прыгаем на метку, где запомним её символ
+
+otherBrackets:
+	sub al, 2					 ; ']' - 2 = '['
+
+pushMe:
+    push ax				         ; запомнили символ этой скобки
+    inc isEmpty                  ; увеличили счётчик скобок на 1
+    jmp afterAddToStackAndOrCloseBracket
+
+colorCloseBracket:	
+    mov ds:[si+1], red           ; изменили цвет скобки на красный
+    jmp afterAddToStackAndOrCloseBracket
+
+letsColorIt:   
+    mov bx, isEmpty
+
+colorLoop:
+    cmp bx, 0
+    je end_handler
+
+    pop si                       ; извлекли координату неправильно расставленной скобки из стека
+    pop si
+
+    mov ds:[si+1], red           ; изменили цвет скобки на красный
+
+    dec bx
+
+    jmp colorLoop
+ 
+end_handler: 
+    mov isEmpty, bx
+
+    pop es 
+    pop ds
+
+    popa   
+    sti                           ; Разрешаем прерывания
+    iret                          ; Сначала извлекате IP из стека, затем CS, и в конце регистр флагов (поэтому не вызываем перед ним popf)
+
+new_handler endp  
+  
+start:
+    
+    
+    
+    
+    mov ax, 0600h                   ;   Очистка экрана
+    mov bh, 07h
+    mov cx, 0000h
+    mov dx, 184Fh
+    int 10h
+    
+    mov ax, @data
+    mov ds, ax
+    
+    
+    mov ah,0f1h        ; проверка резидентности
+    mov al,0          
+    int 2fh
+    cmp al,0ffh        
+    jne isNotResident 
+    pusha
+    mov ah, 09h
+    int 21h
+    
+    popa
+    jmp exit
+    
+    isNotResident:
+    mov ah, 35h                     ;   Функция считывания вектора прерывания
+    mov al, 09h                     ;   Прерывания от клавиатуры
+    int 21h                         ;   На выходе ES:BX - адрес обработчика прерывания 
+                                        
+    mov word ptr cs:[old_int], bx   ;   Запоминаем наш обработчик (смещение)
+    mov word ptr cs:[old_int+2], es ;   (сегмент)                                          
+                                        
+    mov ah, 25h                     ;   Функция установки нового обработчика
+    mov al, 09h                     ;   Номер прерывания
+    push cs                         ;   Устанавливаем новый обработчик прерывания 09h
+    pop ds                          ;   Помещаем в DS CS (подготавливаем сегмент для адреса нового обработчика)
+    mov dx, offset new_handler      ;   Смещение нового обработчика
+    int 21h                         ;   DS:DX - адрес нового обработчика
+                                        
+    mov ah, 31h                     ;   Функция, которая оставляет программу резидентной
+    exit:
+    mov al, 00h                     ;   Код выхода
+    mov dx, (code_size / 16) + (data_size / 16) + 16 + 16 + 2 ;(Размер в 16-байтных сегментах) = размер кода + размер данных + размер стрека + размер PSP + 1 параграф для переменных code_size, data_size     
+    int 21h 
+    
+code_size dw $-code                 ; узнаём размер кода
+end start 
