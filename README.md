@@ -1,6 +1,6 @@
 # asm_labs
 
-BSUIR, 850503, Alex Basko. Assembler labs
+BSUIR, 850503, Aliaksandr Basko. Assembler labs
 
 ***Если вы взяли что-то отсюда, то поставьте звездочку) Можете еще написать в вк, это приятно)))) https://vk.com/alba.sandros***
 
